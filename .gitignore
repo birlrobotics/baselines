@@ -36,4 +36,4 @@ src
 MUJOCO_LOG.TXT
 
 # Visual code files
-/vscode
+**/vscode
