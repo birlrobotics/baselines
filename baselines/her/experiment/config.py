@@ -1,7 +1,7 @@
 import os
 import numpy as np
 import gym
-
+from ipdb import set_trace
 from baselines import logger
 from baselines.her.ddpg import DDPG
 from baselines.her.her_sampler import make_sample_her_transitions
@@ -52,6 +52,7 @@ DEFAULT_PARAMS = {
     'demo_batch_size': 128, #number of samples to be used from the demonstrations buffer, per mpi thread 128/1024 or 32/256
     'prm_loss_weight': 0.001, #Weight corresponding to the primary loss
     'aux_loss_weight':  0.0078, #Weight corresponding to the auxilliary loss also called the cloning loss
+
 }
 
 
@@ -149,7 +150,7 @@ def simple_goal_subtract(a, b):
     return a - b
 
 
-def configure_ddpg(dims, params, reuse=False, use_mpi=True, clip_return=True):
+def configure_ddpg(dims, params, reuse=False, use_mpi=True, clip_return=True, n_GER=0,err_distance=0.05,n_KER=0, env_name = None):
     sample_her_transitions = configure_her(params)
     # Extract relevant parameters.
     gamma = params['gamma']
@@ -179,7 +180,7 @@ def configure_ddpg(dims, params, reuse=False, use_mpi=True, clip_return=True):
     ddpg_params['info'] = {
         'env_name': params['env_name'],
     }
-    policy = DDPG(reuse=reuse, **ddpg_params, use_mpi=use_mpi)
+    policy = DDPG(reuse=reuse,n_KER=n_KER, env_name = env_name, n_GER=n_GER,err_distance=err_distance, **ddpg_params, use_mpi=use_mpi)
     return policy
 
 

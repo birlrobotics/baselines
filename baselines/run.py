@@ -13,7 +13,8 @@ from baselines.common.cmd_util import common_arg_parser, parse_unknown_args, mak
 from baselines.common.tf_util import get_session
 from baselines import logger
 from importlib import import_module
-
+import datetime
+import os
 try:
     from mpi4py import MPI
 except ImportError:
@@ -32,7 +33,7 @@ except ImportError:
 _game_envs = defaultdict(set)
 for env in gym.envs.registry.all():
     # TODO: solve this with regexes
-    env_type = env._entry_point.split(':')[0].split('.')[-1]
+    env_type = env.entry_point.split(':')[0].split('.')[-1]
     _game_envs[env_type].add(env.id)
 
 # reading benchmark names directly from retro requires
@@ -77,6 +78,10 @@ def train(args, extra_args):
         env=env,
         seed=seed,
         total_timesteps=total_timesteps,
+        save_path = args.save_path,
+        n_KER = args.n_KER,
+        before_GER_minibatch_size = args.before_GER_minibatch_size,
+        n_GER = args.n_GER,
         **alg_kwargs
     )
 
@@ -126,7 +131,7 @@ def get_env_type(args):
 
     # Re-parse the gym registry, since we could have new envs since last time.
     for env in gym.envs.registry.all():
-        env_type = env._entry_point.split(':')[0].split('.')[-1]
+        env_type = env.entry_point.split(':')[0].split('.')[-1]
         _game_envs[env_type].add(env.id)  # This is a set so add is idempotent
 
     if env_id in _game_envs.keys():
@@ -205,6 +210,16 @@ def main(args):
     arg_parser = common_arg_parser()
     args, unknown_args = arg_parser.parse_known_args(args)
     extra_args = parse_cmdline_kwargs(unknown_args)
+    if args.log_path is not None:
+        # =========modifiy the log path with time=============
+        time = datetime.datetime.now().strftime('%y_%a_%b_%d_%H:%M:%S:%f')
+        args.log_path = os.path.join(args.log_path,time)
+        # =====================================================
+    if args.save_path is not None:
+        # =========modifiy the save path with time=============
+        time = datetime.datetime.now().strftime('%y_%a_%b_%d_%H:%M:%S:%f')
+        args.save_path = os.path.join(args.save_path,time)
+        # =====================================================
 
     if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
         rank = 0
@@ -217,6 +232,10 @@ def main(args):
 
     if args.save_path is not None and rank == 0:
         save_path = osp.expanduser(args.save_path)
+
+        # =========modifiy the save path with time=============
+        # save_path_custom = os.path.join(save_path,time)
+        # =====================================================
         model.save(save_path)
 
     if args.play:
@@ -226,7 +245,7 @@ def main(args):
         state = model.initial_state if hasattr(model, 'initial_state') else None
         dones = np.zeros((1,))
 
-        episode_rew = 0
+        episode_rew = np.zeros(env.num_envs) if isinstance(env, VecEnv) else np.zeros(1)
         while True:
             if state is not None:
                 actions, _, state, _ = model.step(obs,S=state, M=dones)
@@ -234,13 +253,13 @@ def main(args):
                 actions, _, _, _ = model.step(obs)
 
             obs, rew, done, _ = env.step(actions)
-            episode_rew += rew[0] if isinstance(env, VecEnv) else rew
+            episode_rew += rew
             env.render()
-            done = done.any() if isinstance(done, np.ndarray) else done
-            if done:
-                print('episode_rew={}'.format(episode_rew))
-                episode_rew = 0
-                obs = env.reset()
+            done_any = done.any() if isinstance(done, np.ndarray) else done
+            if done_any:
+                for i in np.nonzero(done)[0]:
+                    print('episode_rew={}'.format(episode_rew[i]))
+                    episode_rew[i] = 0
 
     env.close()
 
@@ -248,3 +267,4 @@ def main(args):
 
 if __name__ == '__main__':
     main(sys.argv)
+
