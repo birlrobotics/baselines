@@ -1,32 +1,33 @@
 import numpy as np
 from gym.envs.robotics import rotations as r_tool
 from numpy.linalg import inv
-from ipdb import set_trace
+#from ipdb import set_trace
 import math
 
 PI = math.pi
 SYM_PLANE_Y = 0.75 * 2
 
-IF_CLEAR_BUFFER = False
-SINGLE_SUC_RATE_THRESHOLD = None  # Set to none if donnot terminate KER
-
-
-MAX_Z_THETA_PICK_PUSH = 0.1443
-MAX_Z_THETA_SLIDE = 0.0697
+IF_CLEAR_BUFFER              = False
+SINGLE_SUC_RATE_THRESHOLD    = None     # Set to none if donnot terminate KER
+MAX_Z_THETA_PICK_PUSH        = 0.1443   # max angle for feasible traj's in pick-push
+MAX_Z_THETA_SLIDE            = 0.0697   # max angle for feasible traj's in slide
 BOOL_OUTPUT_ONE_EPISODE_TRAJ = False # Generated one episode KER trajectories for plotting
+
 class ker_learning:
     def __init__(self,env_type,n_KER):
-        self.env_type = env_type
-        self.n_KER = n_KER
-        self.sym_plane = None
-        if (self.env_type == 'FetchPickAndPlace-v1') or (self.env_type == 'FetchPush-v1' )or (self.env_type == 'FetchReach-v1' ) :
-            self.max_z_theta= MAX_Z_THETA_PICK_PUSH
-            self.robot_base_x = 0.695
-            self.robot_base_y = 0.75
+        self.env_type   = env_type
+        self.n_KER      = n_KER
+        self.sym_plane  = None
+
+        if (self.env_type == 'FetchPickAndPlace-v1') or (self.env_type == 'FetchPush-v1' ) or (self.env_type == 'FetchReach-v1' ) :
+            self.max_z_theta    = MAX_Z_THETA_PICK_PUSH
+            self.robot_base_x   = 0.695
+            self.robot_base_y   = 0.75
+
         elif  self.env_type == 'FetchSlide-v1' :
-            self.max_z_theta = MAX_Z_THETA_SLIDE
-            self.robot_base_x = 0.34
-            self.robot_base_y = 0.75
+            self.max_z_theta    = MAX_Z_THETA_SLIDE
+            self.robot_base_x   = 0.34
+            self.robot_base_y   = 0.75
 
     def y_ker(self,param):
         return self.sym_plane_compute(param,'y_axis','y_ker')
@@ -36,6 +37,19 @@ class ker_learning:
 
 
     def kaleidoscope_robot(self, param, z_theta, sym_axis = 'y_axis', sym_method = 'y_ker'):
+        ''' Will compute transformations of (s,a,r,s',g,ag) according to transportation. 
+
+        Fetch observations have the following format:
+        0-2 gripper   absolute position, 
+        3-5 object    absolute position, 
+        6-8 object    relative position w.r.t. the gripper position, 
+        9-10 gripper  fingers' positions (not apply KER for it), 
+        11-13 object  absolute orientation, 
+        14-16 object  relative velocity w.r.t gripper velocity, 
+        17-19 object  absolute angular velocity, 
+        20-22 gripper absolute velocity,
+        23-24 gripper fingers' velocities(not apply KER to it)
+        '''
         
         if sym_axis == 'y_axis':
             # in linear variable, plus i; in angular variable, minus i
@@ -54,6 +68,7 @@ class ker_learning:
 
         inv_theta = np.array([0,0,-z_theta])
         inv_rot_z_theta = r_tool.euler2mat(inv_theta)
+        
         # Determine the input is which element
         param_len = len(param[0])
         #goal & achieved goal  
@@ -97,16 +112,18 @@ class ker_learning:
             theta_a = param[0][11:14]
             param[0][11:14] = self.orientation_mat_symmetric_with_rot_plane(theta_a, rot_z_theta, inv_rot_z_theta, i)
             
-            # get the obj real velp 
+            # get the obj real velp: objv vel is relative to the gripper. To get true velp need to add gripper vel.
             v_l_a = param[0][14:17]+param[0][20:23]
             # get the sym obj real velp
             s_v_l_a = self.linear_vector_symmetric_with_rot_plane(False, v_l_a, rot_z_theta, inv_rot_z_theta, i)
             param[0][14:17] =  s_v_l_a
+
             # get the sym grip real velp
             v_l_a = param[0][20:23]
             s_v_l_a = self.linear_vector_symmetric_with_rot_plane(False, v_l_a, rot_z_theta, inv_rot_z_theta, i)
             param[0][20:23] =  s_v_l_a
-            # get the sym obj relative velp 
+            
+            # get the sym obj relative velp: to set the symmetryic velp need to subtract by the gripper velocity
             param[0][14:17] -= param[0][20:23]
 
             # sym_obj_velr
@@ -141,6 +158,12 @@ class ker_learning:
 
 
     def orientation_mat_symmetric_with_rot_plane(self, theta_a, rot_z_theta, inv_rot_z_theta, i):
+        '''
+        Imagine an object that stands on the left side, but always touches and moves with the plane of symmetry. The plane
+        rotates from 0 to 90 degrees. The orientation of this object is the identity. Now think of the reflection. 
+        At z=0, they are parallel, but as theta grows, the reflected object must yaw about +z-axis. When theta is 90, we effectively yaw not 90 degress but 180.
+        '''
+        
         # Point 'a' orientation euler angle = theta_a
         # euler to rot matrix for transform
         v_r_a = r_tool.euler2mat(theta_a)
@@ -152,7 +175,7 @@ class ker_learning:
 
         # Sym on transformed S's xoz plane (y axis)
         v_r_a_hat[0-i] = -v_r_a_hat[0-i]
-        v_r_a_hat[2] = -v_r_a_hat[2]
+        v_r_a_hat[2]   = -v_r_a_hat[2]
 
         # euler to rot matrix for transform 
         v_r_a_hat = r_tool.euler2mat(v_r_a_hat)
@@ -160,6 +183,7 @@ class ker_learning:
 
         # Rot matrix to euler for return
         s_v_r_a = r_tool.mat2euler(s_v_r_a)
+
         return s_v_r_a.copy()
 
     def kaleidoscope_obj():
@@ -169,6 +193,9 @@ class ker_learning:
 
 
     def sym_plane_compute(self,param,sym_axis,sym_method):
+        ''' TODO: not clear why we need this.
+        '''
+
         # This function is for the vanilla ker. (x&y ker)
         if sym_axis == 'y_axis':
             # in linear variable, plus i; in angular variable, minus i
@@ -241,7 +268,7 @@ class ker_learning:
         # If self.n_KER == None, means use vanillar her, or in test mode.
         if self.n_KER == None or self.n_KER == 0:
             if BOOL_OUTPUT_ONE_EPISODE_TRAJ:
-                np.save(('/home/bourne/data_plot/visualized_plot_ker_traj/all_n_KER_trajs/sym_'+str(self.n_KER)+'.npy'), ka_episodes_set)
+                np.save(('/media/juan/hdd/data/iter/plot/visualized_plot_ker_traj/all_n_KER_trajs/sym_'+str(self.n_KER)+'.npy'), ka_episodes_set)
                 set_trace()
             return ka_episodes_set
 
@@ -258,16 +285,16 @@ class ker_learning:
             #output the symmetric thetas for one step 
             output_theta_set = z_theta_set.copy()
             output_theta_set.append(0)
-            save_dir = '/home/bourne/data_plot/visualized_plot_ker_traj/all_n_KER_trajs/thetas_n_KER_'+str(self.n_KER)+'.npy'
+            save_dir = '/media/juan/hdd/iter/data_plot/visualized_plot_ker_traj/all_n_KER_trajs/thetas_n_KER_'+str(self.n_KER)+'.npy'
             np.save(save_dir, output_theta_set)
 
         ka_episodes_tem = []
         for z_theta in z_theta_set:
             
             for [o_obs, o_acts, o_goals, o_achieved_goals] in ka_episodes_set:
-                s_goals = []
-                s_obs = []
-                s_acts = []
+                s_goals = [] # Symmetric counterparts
+                s_obs   = []
+                s_acts  = []
                 s_achieved_goals = []
                 for goal in o_goals:
                     s_goal = self.kaleidoscope_robot(goal.copy(),z_theta)
@@ -290,12 +317,12 @@ class ker_learning:
             ka_episodes_set.append(ka_episode)
         # ---------------------------end
 
-        #--------------- All datas are symmetrized with y axis.
+        #--------------- All datas are symmetrized by the y axis.
         yker_episode_set = []
         for [o_obs, o_acts, o_goals, o_achieved_goals] in ka_episodes_set:
             y_goals = []
-            y_obs = []
-            y_acts = []
+            y_obs   = []
+            y_acts  = []
             y_achieved_goals = []
             for goal in o_goals:
                 y_goal = self.y_ker(goal.copy())
@@ -318,8 +345,8 @@ class ker_learning:
 
         # output the trajs for one step
         if BOOL_OUTPUT_ONE_EPISODE_TRAJ:
-            np.save(('/home/bourne/data_plot/visualized_plot_ker_traj/all_n_KER_trajs/trajs_n_KER_'+str(self.n_KER)+'.npy'), ka_episodes_set)
-            set_trace()
+            np.save(('/media/juan/hdd/data/iter/data_plot/visualized_plot_ker_traj/all_n_KER_trajs/trajs_n_KER_'+str(self.n_KER)+'.npy'), ka_episodes_set)
+            #set_trace()
         return ka_episodes_set
         #--------------- end.
 

@@ -17,6 +17,7 @@ def make_sample_her_transitions(replay_strategy, replay_k, reward_fun):
         future_p = 1 - (1. / (1 + replay_k))
     else:  # 'replay_strategy' == 'none'
         future_p = 0
+
     def _sample_her_transitions(episode_batch, batch_size_in_transitions,env_name=None, n_GER=0,err_distance=0.05):
         """episode_batch is {key: array(buffer_size x T x dim_key)}
         """
@@ -26,18 +27,18 @@ def make_sample_her_transitions(replay_strategy, replay_k, reward_fun):
 
         batch_size = batch_size_in_transitions
 
-        # Select which episodes and time steps to use.
+        # Future's Strategy: Select which episodes and time steps to use.
         episode_idxs = np.random.randint(0, rollout_batch_size, batch_size)
-        t_samples = np.random.randint(T, size=batch_size)
-        transitions = {key: episode_batch[key][episode_idxs, t_samples].copy()
-                       for key in episode_batch.keys()}
+        t_samples    = np.random.randint(T, size=batch_size)
+        transitions  = {key: episode_batch[key][episode_idxs, t_samples].copy()
+                       for key in episode_batch.keys()} # ~randomize entries (some can be repeated): decorrelate?
 
         # Select future time indexes proportional with probability future_p. These
         # will be used for HER replay by substituting in future goals.
-        her_indexes = np.where(np.random.uniform(size=batch_size) < future_p)
+        her_indexes   = np.where(np.random.uniform(size=batch_size) < future_p) 
         future_offset = np.random.uniform(size=batch_size) * (T - t_samples)
         future_offset = future_offset.astype(int)
-        future_t = (t_samples + 1 + future_offset)[her_indexes]
+        future_t = (t_samples + 1 + future_offset)[her_indexes] # probabilistically weighted future offset addition to t_samples
 
         # Replace goal with achieved goal but only for the previously-selected
         # HER transitions (as defined by her_indexes). For the other transitions,
@@ -46,21 +47,21 @@ def make_sample_her_transitions(replay_strategy, replay_k, reward_fun):
         transitions['g'][her_indexes] = future_ag.copy()
 
         # create a new dict to store all the original, KER, HER, AGER data.
-        all_transitions = {key: transitions[key].copy()
+        all_transitions = {key: transitions[key].copy()  # Q: why not instantiate directly. everything is copied...
                         for key in episode_batch.keys()}
 
         # ----------------Goal-augmented ER--------------------------- 
         if n_GER:
             # when n_GER != 0
             for _ in range (n_GER):
-                PER_transitions = {key: transitions[key].copy()
+                PER_transitions = {key: transitions[key].copy() # Actually, no need to copy everything. Only goals will be changed. Could be added more efficiently.
                         for key in episode_batch.keys()}
-                ger_machine = ger_learning(env_name = env_name,err_distance=err_distance)
-                PER_indexes= np.array((range(0,batch_size)))
+                ger_machine       = ger_learning(env_name = env_name, err_distance = err_distance)
+                PER_indexes       = np.array((range(0,batch_size)))
                 HER_KER_future_ag = PER_transitions['g'][PER_indexes].copy()
-                PER_future_g = ger_machine.process_goals(HER_KER_future_ag.copy())
-                PER_transitions['g'][PER_indexes] = PER_future_g.copy()
-                for key in episode_batch.keys():
+                PER_future_g      = ger_machine.process_goals(HER_KER_future_ag.copy()) # Add noise within the sphere to our future goals
+                PER_transitions['g'][PER_indexes] = PER_future_g.copy() # Create a copy of new goals
+                for key in episode_batch.keys(): # Do the augmentation of the goals
                     all_transitions[key] = np.vstack([all_transitions[key], PER_transitions[key].copy()])
         # -----------------------End--------------------------- 
 
@@ -72,15 +73,15 @@ def make_sample_her_transitions(replay_strategy, replay_k, reward_fun):
         info = {}
         for key, value in all_transitions.items():
             if key.startswith('info_'):
-                info[key.replace('info_', '')] = value
+                info[key.replace('info_', '')] = value # Create binary key/value pairs for whether success or not.
 
         # Re-compute reward since we may have substituted the goal.
         reward_params = {k: all_transitions[k] for k in ['ag_2', 'g']}
         reward_params['info'] = info
-        all_transitions['r'] = reward_fun(**reward_params)
+        all_transitions['r'] = reward_fun(**reward_params) # save the rewards
 
         all_transitions = {k: all_transitions[k].reshape(batch_size, *all_transitions[k].shape[1:])
-                       for k in all_transitions.keys()}
+                       for k in all_transitions.keys()} # ?
     
         assert(all_transitions['u'].shape[0] == batch_size_in_transitions)
         return all_transitions

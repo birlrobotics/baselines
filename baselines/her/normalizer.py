@@ -65,8 +65,8 @@ class Normalizer:
         v = v.reshape(-1, self.size)
 
         with self.lock:
-            self.local_sum += v.sum(axis=0)
-            self.local_sumsq += (np.square(v)).sum(axis=0)
+            self.local_sum      += v.sum(axis=0) # sum cols
+            self.local_sumsq    += (np.square(v)).sum(axis=0)
             self.local_count[0] += v.shape[0]
 
     def normalize(self, v, clip_range=None):

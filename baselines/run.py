@@ -9,7 +9,7 @@ import numpy as np
 
 from baselines.common.vec_env import VecFrameStack, VecNormalize, VecEnv
 from baselines.common.vec_env.vec_video_recorder import VecVideoRecorder
-from baselines.common.cmd_util import common_arg_parser, parse_unknown_args, make_vec_env, make_env
+from baselines.common.cmd_util import common_arg_parser, parse_unknown_args, make_vec_env, make_env # KER cmd_line
 from baselines.common.tf_util import get_session
 from baselines import logger
 from importlib import import_module
@@ -25,9 +25,9 @@ try:
 except ImportError:
     pybullet_envs = None
 
-try:
-    import roboschool
-except ImportError:
+# try:
+#     import roboschool
+# except ImportError:
     roboschool = None
 
 _game_envs = defaultdict(set)
@@ -58,8 +58,8 @@ def train(args, extra_args):
     total_timesteps = int(args.num_timesteps)
     seed = args.seed
 
-    learn = get_learn_function(args.alg)
-    alg_kwargs = get_learn_function_defaults(args.alg, env_type)
+    learn       = get_learn_function(args.alg)
+    alg_kwargs  = get_learn_function_defaults(args.alg, env_type)
     alg_kwargs.update(extra_args)
 
     env = build_env(args)
@@ -75,13 +75,13 @@ def train(args, extra_args):
     print('Training {} on {}:{} with arguments \n{}'.format(args.alg, env_type, env_id, alg_kwargs))
 
     model = learn(
-        env=env,
-        seed=seed,
-        total_timesteps=total_timesteps,
-        save_path = args.save_path,
-        n_KER = args.n_KER,
+        env             = env,
+        seed            = seed,
+        total_timesteps = total_timesteps,
+        save_path       = args.save_path,
+        n_KER           = args.n_KER,
         before_GER_minibatch_size = args.before_GER_minibatch_size,
-        n_GER = args.n_GER,
+        n_GER           = args.n_GER,
         **alg_kwargs
     )
 
@@ -207,7 +207,7 @@ def configure_logger(log_path, **kwargs):
 def main(args):
     # configure logger, disable logging in child MPI processes (with rank > 0)
 
-    arg_parser = common_arg_parser()
+    arg_parser = common_arg_parser() # Will parse args including KER/GER
     args, unknown_args = arg_parser.parse_known_args(args)
     extra_args = parse_cmdline_kwargs(unknown_args)
     if args.log_path is not None:
