@@ -10,7 +10,7 @@ from baselines.her.util import reshape_for_broadcasting
 class Normalizer:
     def __init__(self, size, eps=1e-2, default_clip_range=np.inf, sess=None):
         """A normalizer that ensures that observations are approximately distributed according to
-        a standard Normal distribution (i.e. have mean zero and variance one).
+        a standard Normal distribution (i.e. have mean zero and variance one) to facilitate learning in DNNs.
 
         Args:
             size (int): the size of the observation to be normalized
@@ -65,8 +65,8 @@ class Normalizer:
         v = v.reshape(-1, self.size)
 
         with self.lock:
-            self.local_sum += v.sum(axis=0)
-            self.local_sumsq += (np.square(v)).sum(axis=0)
+            self.local_sum      += v.sum(axis=0) # sum cols
+            self.local_sumsq    += (np.square(v)).sum(axis=0)
             self.local_count[0] += v.shape[0]
 
     def normalize(self, v, clip_range=None):
@@ -97,7 +97,7 @@ class Normalizer:
         with self.lock:
             # Copy over results.
             local_count = self.local_count.copy()
-            local_sum = self.local_sum.copy()
+            local_sum   = self.local_sum.copy()
             local_sumsq = self.local_sumsq.copy()
 
             # Reset.
@@ -106,15 +106,15 @@ class Normalizer:
             self.local_sumsq[...] = 0
 
         # We perform the synchronization outside of the lock to keep the critical section as short
-        # as possible.
+        # as possible. Averages over number of MPIs.
         synced_sum, synced_sumsq, synced_count = self.synchronize(
             local_sum=local_sum, local_sumsq=local_sumsq, local_count=local_count)
 
         self.sess.run(self.update_op, feed_dict={
-            self.count_pl: synced_count,
-            self.sum_pl: synced_sum,
-            self.sumsq_pl: synced_sumsq,
-        })
+                        self.count_pl:  synced_count,
+                        self.sum_pl:    synced_sum,
+                        self.sumsq_pl:  synced_sumsq,
+                        })
         self.sess.run(self.recompute_op)
 
 

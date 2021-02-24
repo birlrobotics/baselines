@@ -1,5 +1,5 @@
 import threading
-
+from ipdb import set_trace
 import numpy as np
 
 
@@ -34,21 +34,20 @@ class ReplayBuffer:
         with self.lock:
             return self.current_size == self.size
 
-    def sample(self, batch_size):
+    def sample(self, batch_size,env_name=None,n_GER=0,err_distance=0.05):
         """Returns a dict {key: array(batch_size x shapes[key])}
+            batch_size is before_GER_batch_size
         """
         buffers = {}
 
         with self.lock:
             assert self.current_size > 0
             for key in self.buffers.keys():
-                buffers[key] = self.buffers[key][:self.current_size]
+                buffers[key] = self.buffers[key][:self.current_size] # What are we doing here?
 
-        buffers['o_2'] = buffers['o'][:, 1:, :]
+        buffers['o_2'] = buffers['o'][:, 1:, :] # copy
         buffers['ag_2'] = buffers['ag'][:, 1:, :]
-
-        transitions = self.sample_transitions(buffers, batch_size)
-
+        transitions = self.sample_transitions(buffers, batch_size, env_name = env_name, n_GER=n_GER, err_distance=err_distance)
         for key in (['r', 'o_2', 'ag_2'] + list(self.buffers.keys())):
             assert key in transitions, "key %s missing from transitions" % key
 
@@ -85,6 +84,9 @@ class ReplayBuffer:
     def clear_buffer(self):
         with self.lock:
             self.current_size = 0
+            self.n_transitions_stored = 0
+            self.buffers = {key: np.empty([self.size, *shape])
+                            for key, shape in self.buffer_shapes.items()}
 
     def _get_storage_idx(self, inc=None):
         inc = inc or 1   # size increment

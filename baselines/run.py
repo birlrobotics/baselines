@@ -9,11 +9,12 @@ import numpy as np
 
 from baselines.common.vec_env import VecFrameStack, VecNormalize, VecEnv
 from baselines.common.vec_env.vec_video_recorder import VecVideoRecorder
-from baselines.common.cmd_util import common_arg_parser, parse_unknown_args, make_vec_env, make_env
+from baselines.common.cmd_util import common_arg_parser, parse_unknown_args, make_vec_env, make_env # KER cmd_line
 from baselines.common.tf_util import get_session
 from baselines import logger
 from importlib import import_module
-
+import datetime
+import os
 try:
     from mpi4py import MPI
 except ImportError:
@@ -24,9 +25,9 @@ try:
 except ImportError:
     pybullet_envs = None
 
-try:
-    import roboschool
-except ImportError:
+# try:
+#     import roboschool
+# except ImportError:
     roboschool = None
 
 _game_envs = defaultdict(set)
@@ -57,8 +58,8 @@ def train(args, extra_args):
     total_timesteps = int(args.num_timesteps)
     seed = args.seed
 
-    learn = get_learn_function(args.alg)
-    alg_kwargs = get_learn_function_defaults(args.alg, env_type)
+    learn       = get_learn_function(args.alg)
+    alg_kwargs  = get_learn_function_defaults(args.alg, env_type)
     alg_kwargs.update(extra_args)
 
     env = build_env(args)
@@ -74,9 +75,13 @@ def train(args, extra_args):
     print('Training {} on {}:{} with arguments \n{}'.format(args.alg, env_type, env_id, alg_kwargs))
 
     model = learn(
-        env=env,
-        seed=seed,
-        total_timesteps=total_timesteps,
+        env             = env,
+        seed            = seed,
+        total_timesteps = total_timesteps,
+        save_path       = args.save_path,
+        n_KER           = args.n_KER,
+        before_GER_minibatch_size = args.before_GER_minibatch_size,
+        n_GER           = args.n_GER,
         **alg_kwargs
     )
 
@@ -202,13 +207,23 @@ def configure_logger(log_path, **kwargs):
 def main(args):
     # configure logger, disable logging in child MPI processes (with rank > 0)
 
-    arg_parser = common_arg_parser()
+    arg_parser = common_arg_parser() # Will parse args including KER/GER
     args, unknown_args = arg_parser.parse_known_args(args)
     extra_args = parse_cmdline_kwargs(unknown_args)
+    if args.log_path is not None:
+        # =========modifiy the log path with time=============
+        time = datetime.datetime.now().strftime('%y_%a_%b_%d_%H:%M:%S:%f') # simpler version: '%y%b%d_%H%M%S'
+        args.log_path = os.path.join(args.log_path,time)
+        # =====================================================
+    if args.save_path is not None:
+        # =========modifiy the save path with time=============
+        time = datetime.datetime.now().strftime('%y_%a_%b_%d_%H:%M:%S:%f')
+        args.save_path = os.path.join(args.save_path,time)
+        # =====================================================
 
     if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
         rank = 0
-        configure_logger(args.log_path)
+        configure_logger(args.log_path) # Create folder and loggers
     else:
         rank = MPI.COMM_WORLD.Get_rank()
         configure_logger(args.log_path, format_strs=[])
@@ -217,6 +232,10 @@ def main(args):
 
     if args.save_path is not None and rank == 0:
         save_path = osp.expanduser(args.save_path)
+
+        # =========modifiy the save path with time=============
+        # save_path_custom = os.path.join(save_path,time)
+        # =====================================================
         model.save(save_path)
 
     if args.play:
@@ -248,3 +267,4 @@ def main(args):
 
 if __name__ == '__main__':
     main(sys.argv)
+

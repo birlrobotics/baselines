@@ -1,4 +1,4 @@
-*.swp
+.*.swp
 *.pyc
 *.pkl
 *.py~
@@ -34,3 +34,7 @@ src
 .cache
 
 MUJOCO_LOG.TXT
+
+# Visual code files
+**/.vscode
+.vscode/**
