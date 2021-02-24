@@ -258,10 +258,10 @@ class ker_learning:
 
 
     def ker_process(self,obs,acts,goals,achieved_goals):
-
-
+        ''' Will do invariant transform augmentation. Augments time-steps by 2nker - 1 + nger
+        ''' 
         # ---------------------------linear symmetry------------------------------------------------
-        ka_episodes_set=[]
+        ka_episodes_set = []
         ka_episodes_set.append([obs,acts,goals,achieved_goals])
         z_theta_set = []
 

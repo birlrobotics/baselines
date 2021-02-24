@@ -10,7 +10,7 @@ from baselines.common import set_global_seeds, tf_util
 from baselines.common.mpi_moments import mpi_moments
 import baselines.her.experiment.config as config
 from baselines.her.rollout import RolloutWorker
-from ipdb import set_trace
+#from ipdb import set_trace
 from tensorboardX import SummaryWriter
 from baselines.her.ker_learning_method import SINGLE_SUC_RATE_THRESHOLD,IF_CLEAR_BUFFER
 
@@ -26,15 +26,20 @@ def mpi_average(value):
     return mpi_moments(np.array(value))[0]
 
 
-def train(*, policy, rollout_worker, evaluator,
-          n_epochs, n_test_rollouts, n_cycles, n_batches, policy_save_interval,
-          save_path, demo_file, env_name,n_KER, **kwargs):
+def train(*, policy, 
+             rollout_worker, evaluator,
+             n_epochs, n_test_rollouts, n_cycles, n_batches, 
+             policy_save_interval,
+             save_path, 
+             demo_file, 
+             env_name,n_KER, 
+             **kwargs):
     rank = MPI.COMM_WORLD.Get_rank()
 
     if save_path:
-        latest_policy_path = os.path.join(save_path, 'policy_latest.pkl')
-        best_policy_path = os.path.join(save_path, 'policy_best.pkl')
-        periodic_policy_path = os.path.join(save_path, 'policy_{}.pkl')
+        latest_policy_path      = os.path.join(save_path, 'policy_latest.pkl')
+        best_policy_path        = os.path.join(save_path, 'policy_best.pkl')
+        periodic_policy_path    = os.path.join(save_path, 'policy_{}.pkl')
 
     logger.info("Training...")
     best_success_rate = -1
@@ -44,12 +49,14 @@ def train(*, policy, rollout_worker, evaluator,
     # num_timesteps = n_epochs * n_cycles * rollout_length * number of rollout workers
 
     # prepare the param for training on KER
-    n_KER_number = n_KER
-    first_time_enter = True
-    test_suc_rate = 0
+    n_KER_number        = n_KER
+    first_time_enter    = True
+    test_suc_rate       = 0
     single_suc_rate_threshold = SINGLE_SUC_RATE_THRESHOLD
-    terminate_ker_now = False
-    if_clear_buffer = False
+    terminate_ker_now   = False
+    if_clear_buffer     = False
+    
+    
     for epoch in range(n_epochs):
         # train
         
@@ -62,11 +69,15 @@ def train(*, policy, rollout_worker, evaluator,
         #         terminate_ker_now = True
 
         rollout_worker.clear_history()
+
+
         for _ in range(n_cycles):
-            # generate episodes
+
+            # generate episodeS: TODO: how many?
             episodes = rollout_worker.generate_rollouts(terminate_ker=terminate_ker_now)
-            # with KER
-            # if (n_KER_number !=0) and terminate_ker_now==False:
+            
+            # With KER
+            # if (n_KER_number !=0) and terminate_ker_now == False:
             if (n_KER_number !=0):
                 for episode in episodes:
                     policy.store_episode(episode)
@@ -124,20 +135,20 @@ def train(*, policy, rollout_worker, evaluator,
 
 
 def learn(*, network, env, total_timesteps,
-    seed=None,
-    eval_env=None,
-    replay_strategy='future',
-    policy_save_interval=5,
-    clip_return=True,
-    demo_file=None,
-    override_params=None,
-    load_path=None,
-    save_path=None,
-    n_KER = 0,
-    before_GER_minibatch_size = None,
-    n_GER = 0,
-    err_distance=0.05,
-    **kwargs
+            seed                = None,
+            eval_env            = None,
+            replay_strategy     = 'future',
+            policy_save_interval= 5,
+            clip_return         = True,
+            demo_file           = None,
+            override_params     = None,
+            load_path           = None,
+            save_path           = None,
+            n_KER               = 0,
+            before_GER_minibatch_size = None,
+            n_GER               = 0,
+            err_distance        = 0.05,
+            **kwargs
 ):
 
     override_params = override_params or {}
@@ -149,18 +160,27 @@ def learn(*, network, env, total_timesteps,
     rank_seed = seed + 1000000 * rank if seed is not None else None
     set_global_seeds(rank_seed)
 
-    # Prepare params.
+    # First set default params and update them accordingly
     params = config.DEFAULT_PARAMS
     if before_GER_minibatch_size is not None and n_GER is not None :
         params['batch_size'] = before_GER_minibatch_size * (n_GER+1)
-    env_name = env.spec.id
-    params['env_name'] = env_name
-    params['replay_strategy'] = replay_strategy
+    
+    # Personalize Parameters 
+    env_name                            = env.spec.id
+    params['env_name']                  = env_name
+    params['replay_strategy']           = replay_strategy
+    params['n_KER']                     = n_KER
+    params['n_GER']                     = n_GER
+    params['before_GER_minibatch_size'] = before_GER_minibatch_size
+    
     if env_name in config.DEFAULT_ENV_PARAMS:
         params.update(config.DEFAULT_ENV_PARAMS[env_name])  # merge env-specific parameters in
+    
     params.update(**override_params)  # makes it possible to override any parameter
+    
     with open(os.path.join(logger.get_dir(), 'params.json'), 'w') as f:
          json.dump(params, f)
+    
     params = config.prepare_params(params)
     params['rollout_batch_size'] = env.num_envs
 
@@ -182,55 +202,68 @@ def learn(*, network, env, total_timesteps,
         logger.warn('****************')
         logger.warn()
 
-    dims = config.configure_dims(params)
-    policy = config.configure_ddpg(dims=dims, params=params, clip_return=clip_return,
-                                    n_GER=n_GER,err_distance=err_distance,env_name=env_name)
+    dims    = config.configure_dims(params)
+    policy  = config.configure_ddpg(dims            = dims, 
+                                    params          = params, 
+                                    clip_return     = clip_return,
+                                    n_KER           = n_KER, 
+                                    n_GER           = n_GER,
+                                    err_distance    = err_distance,
+                                    env_name        = env_name)
     if load_path is not None:
         tf_util.load_variables(load_path)
 
     rollout_params = {
-        'exploit': False,
-        'use_target_net': False,
-        'use_demo_states': True,
-        'compute_Q': False,
-        'T': params['T'],
+        'exploit':          False,
+        'use_target_net':   False,
+        'use_demo_states':  True,
+        'compute_Q':        False,
+        'T':                params['T'],
     }
 
     eval_params = {
-        'exploit': True,
-        'use_target_net': params['test_with_polyak'],
-        'use_demo_states': False,
-        'compute_Q': True,
-        'T': params['T'],
+        'exploit':          True,
+        'use_target_net':   params['test_with_polyak'],
+        'use_demo_states':  False,
+        'compute_Q':        True,
+        'T':                params['T'],
     }
 
     for name in ['T', 'rollout_batch_size', 'gamma', 'noise_eps', 'random_eps']:
         rollout_params[name] = params[name]
-        eval_params[name] = params[name]
+        eval_params[name]    = params[name]
 
     eval_env = eval_env or env
 
-    rollout_worker = RolloutWorker(env_name, env, policy, dims, logger, monitor=True,n_KER=n_KER, **rollout_params)
-    evaluator = RolloutWorker(env_name,eval_env, policy, dims, logger, **eval_params)
+    rollout_worker  = RolloutWorker(env_name, env,      policy, dims, logger, monitor=True, n_KER=n_KER, **rollout_params)
+    evaluator       = RolloutWorker(env_name, eval_env, policy, dims, logger, **eval_params)
 
     n_cycles = params['n_cycles']
     n_epochs = total_timesteps // n_cycles // rollout_worker.T // rollout_worker.rollout_batch_size
 
     return train(
-        save_path=save_path, policy=policy, rollout_worker=rollout_worker,
-        evaluator=evaluator, n_epochs=n_epochs, n_test_rollouts=params['n_test_rollouts'],
-        n_cycles=params['n_cycles'], n_batches=params['n_batches'],
-        policy_save_interval=policy_save_interval, demo_file=demo_file,env_name=env_name, n_KER = n_KER)
+                save_path       = save_path, 
+                policy          = policy, 
+                rollout_worker  = rollout_worker,        
+                evaluator       = evaluator, 
+                n_epochs        = n_epochs, 
+                n_test_rollouts = params['n_test_rollouts'],
+                n_cycles        = params['n_cycles'], 
+                n_batches       = params['n_batches'],
+                policy_save_interval = policy_save_interval, 
+                demo_file       = demo_file,
+                env_name        = env_name,
+                n_KER           = n_KER)
 
 
 @click.command()
-@click.option('--env', type=str, default='FetchReach-v1', help='the name of the OpenAI Gym environment that you want to train on')
-@click.option('--total_timesteps', type=int, default=int(5e5), help='the number of timesteps to run')
-@click.option('--seed', type=int, default=0, help='the random seed used to seed both the environment and the training code')
+@click.option('--env',                  type=str, default='FetchReach-v1', help='the name of the OpenAI Gym environment that you want to train on')
+@click.option('--total_timesteps',      type=int, default=int(5e5), help='the number of timesteps to run')
+@click.option('--seed',                 type=int, default=0, help='the random seed used to seed both the environment and the training code')
 @click.option('--policy_save_interval', type=int, default=5, help='the interval with which policy pickles are saved. If set to 0, only the best and latest policy will be pickled.')
-@click.option('--replay_strategy', type=click.Choice(['future', 'none']), default='future', help='the HER replay strategy to be used. "future" uses HER, "none" disables HER.')
-@click.option('--clip_return', type=int, default=1, help='whether or not returns should be clipped')
-@click.option('--demo_file', type=str, default = 'PATH/TO/DEMO/DATA/FILE.npz', help='demo data file path')
+@click.option('--replay_strategy',      type=click.Choice(['future', 'none']), default='future', help='the HER replay strategy to be used. "future" uses HER, "none" disables HER.')
+@click.option('--clip_return',          type=int, default=1, help='whether or not returns should be clipped')
+@click.option('--demo_file',            type=str, default = 'PATH/TO/DEMO/DATA/FILE.npz', help='demo data file path')
 def main(**kwargs):
     learn(**kwargs)
 

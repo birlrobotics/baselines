@@ -43,11 +43,11 @@ class ReplayBuffer:
         with self.lock:
             assert self.current_size > 0
             for key in self.buffers.keys():
-                buffers[key] = self.buffers[key][:self.current_size]
+                buffers[key] = self.buffers[key][:self.current_size] # What are we doing here?
 
-        buffers['o_2'] = buffers['o'][:, 1:, :]
+        buffers['o_2'] = buffers['o'][:, 1:, :] # copy
         buffers['ag_2'] = buffers['ag'][:, 1:, :]
-        transitions = self.sample_transitions(buffers, batch_size,env_name=env_name, n_GER=n_GER,err_distance=err_distance)
+        transitions = self.sample_transitions(buffers, batch_size, env_name = env_name, n_GER=n_GER, err_distance=err_distance)
         for key in (['r', 'o_2', 'ag_2'] + list(self.buffers.keys())):
             assert key in transitions, "key %s missing from transitions" % key
 

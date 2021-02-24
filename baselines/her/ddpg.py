@@ -245,10 +245,10 @@ class DDPG(object):
             transitions['o'], transitions['g'] = self._preprocess_og(o, ag, g)
             # No need to preprocess the o_2 and g_2 since this is only used for stats
 
-            # ... sum and sum-square about cols... saves in self.local
-            self.o_stats.update(transitions['o'])
+            # Get sums and sum-square data for each col. Saved in self.local
+            self.o_stats.update(transitions['o']) # Normalizer object
             self.g_stats.update(transitions['g'])
-
+            # Subtract mean and set std. dev to 1
             self.o_stats.recompute_stats()
             self.g_stats.recompute_stats()
 
@@ -287,7 +287,7 @@ class DDPG(object):
             minibatch_for_KER  = int(self.batch_size/(self.n_GER+1))
             # minibatch_for_KER = 256, self.batch_size = 512, self.n_GER =1
             # minibatch_for_KER = 256, self.batch_size = 1024, self.n_GER =3
-            transitions = self.buffer.sample(minibatch_for_KER,env_name=self.env_name, n_GER=self.n_GER,err_distance=self.err_distance) #otherwise only sample from primary buffer
+            transitions = self.buffer.sample(minibatch_for_KER, env_name=self.env_name, n_GER=self.n_GER, err_distance = self.err_distance) #otherwise only sample from primary buffer
 
         o, o_2, g = transitions['o'], transitions['o_2'], transitions['g']
         ag, ag_2 = transitions['ag'], transitions['ag_2']

@@ -20,20 +20,19 @@ class RolloutWorker:
         """Rollout worker generates experience by interacting with one or many environments.
 
         Args:
-            make_env (function):    a factory function that creates a new instance of the environment
-                when called
-            policy (object):        the policy that is used to act
-            dims (dict of ints):    the dimensions for observations (o), goals (g), and actions (u)
-            logger (object):        the logger that is used by the rollout worker
-            rollout_batch_size (int): the number of parallel rollouts that should be used
-            exploit (boolean):      whether or not to exploit, i.e. to act optimally according to the
-                                    current policy without any exploration
-            use_target_net (boolean): whether or not to use the target net for rollouts
-            compute_Q (boolean):    whether or not to compute the Q values alongside the actions
-            noise_eps (float):      scale of the additive Gaussian noise
-            random_eps (float):     probability of selecting a completely random action
-            history_len (int):      length of history for statistics smoothing
-            render (boolean):       whether or not to render the rollouts
+            make_env (function):        a factory function that creates a new instance of the environment when called
+            policy   (object):          the policy that is used to act
+            dims     (dict of ints):    the dimensions for observations (o), goals (g), and actions (u)
+            logger   (object):          the logger that is used by the rollout worker
+            rollout_batch_size (int):   the number of parallel rollouts that should be used
+            exploit  (boolean):         whether or not to exploit, i.e. to act optimally according to the
+                                        current policy without any exploration
+            use_target_net (boolean):   whether or not to use the target net for rollouts
+            compute_Q   (boolean):      whether or not to compute the Q values alongside the actions
+            noise_eps   (float):        scale of the additive Gaussian noise
+            random_eps  (float):        probability of selecting a completely random action
+            history_len (int):      l   ength of history for statistics smoothing
+            render      (boolean):      whether or not to render the rollouts
         """
 
         assert self.T > 0
@@ -160,8 +159,8 @@ class RolloutWorker:
         """
         self.reset_all_rollouts()
 
-        episodes = []
-        episodes_batch = []
+        episodes        = []
+        episodes_batch  = []
 
         # compute observations
         o     = np.empty((self.rollout_batch_size, self.dims['o']), np.float32)  # observations
@@ -225,15 +224,15 @@ class RolloutWorker:
             successes.append(success.copy())
             acts.append(u.copy())
             goals.append(self.g.copy())
-
-            o[...] = o_new
+            # Set s = s' for new step
+            o[...]  = o_new
             ag[...] = ag_new
-
+        # Append for last time step
         obs.append(o.copy())
         achieved_goals.append(ag.copy())
 
         # ----------------Kaleidoscope ER--------------------------- 
-        original_ka_episodes = self.ker.ker_process(obs,acts,goals,achieved_goals)
+        original_ka_episodes = self.ker.ker_process(obs,acts,goals,achieved_goals) # KER augments original episodes by an amount of 2*n_ker
         # ----------------end---------------------------
 
         # ----------------pack up as transition--------------------------- 
@@ -250,6 +249,7 @@ class RolloutWorker:
         # stats
         successful = np.array(successes)[-1, :]
         assert successful.shape == (self.rollout_batch_size,)
+        
         success_rate = np.mean(successful)
         self.success_history.append(success_rate)
 

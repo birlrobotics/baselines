@@ -212,7 +212,7 @@ def main(args):
     extra_args = parse_cmdline_kwargs(unknown_args)
     if args.log_path is not None:
         # =========modifiy the log path with time=============
-        time = datetime.datetime.now().strftime('%y_%a_%b_%d_%H:%M:%S:%f')
+        time = datetime.datetime.now().strftime('%y_%a_%b_%d_%H:%M:%S:%f') # simpler version: '%y%b%d_%H%M%S'
         args.log_path = os.path.join(args.log_path,time)
         # =====================================================
     if args.save_path is not None:
@@ -223,7 +223,7 @@ def main(args):
 
     if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
         rank = 0
-        configure_logger(args.log_path)
+        configure_logger(args.log_path) # Create folder and loggers
     else:
         rank = MPI.COMM_WORLD.Get_rank()
         configure_logger(args.log_path, format_strs=[])

@@ -57,6 +57,11 @@ DEFAULT_PARAMS = {
     'demo_batch_size': 128, # number of samples to be used from the demonstrations buffer, per mpi thread 128/1024 or 32/256
     'prm_loss_weight': 0.001,   # Weight corresponding to the primary loss
     'aux_loss_weight':  0.0078, # Weight corresponding to the auxilliary loss also called the cloning loss
+
+    # ITER
+    'n_KER':                        8,  # 0 ... 8 16 32
+    "n_GER":                        4,  # 0 ... 4
+    "before_GER_minibatch_size":    256
 }
 
 CACHED_ENVS = {}
