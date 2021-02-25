@@ -1,0 +1,8 @@
+ITER_KER_GER/
+__best_models.xlsx
+__scripts_to_run_load_plot.txt
+
+# Backups
+*.txt~
+*.py#
+
